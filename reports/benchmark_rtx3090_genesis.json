@@ -1,0 +1,149 @@
+{
+  "schema": "rtx3090-mining-sim/benchmark-v2",
+  "generated_at_utc": "2026-10-22T11:13:14Z",
+  "seed": null,
+  "mode": "genesis",
+  "target_hex": "00000000ffff0000000000000000000000000000000000000000000000000000",
+  "target_source": "派生自创世 nBits=0x1d00ffff（确定值）",
+  "target_nbits": "0x1d00ffff",
+  "hash_function": "SHA256d（SHA256(SHA256(80B header))）",
+  "offline": true,
+  "statistics_contract": {
+    "scheduled_attempts": "有效分配的候选 Nonce 数量（精确窗口，<= max_attempts）",
+    "completed_hashes": "内核实际完成哈希数（atomicAdd，<= scheduled_attempts）",
+    "hash_rate": "completed_hashes / elapsed_seconds（MEASURED）"
+  },
+  "gpu_status": "GPU_RUN_NO_HIT",
+  "gpu_status_note": "固定工作量模式正常执行、无命中属于预期（found=false），GPU_STATUS=RUN",
+  "gpu": {
+    "correctness_check": {
+      "value": "PASS",
+      "source": "MEASURED",
+      "method": "search 模式 easy 目标命中 Nonce 后，CPU 用 hashlib 重建区块头复算比对",
+      "gate": "PASS 当且仅当 GPU found=true 且 CPU 复核一致；未命中为 NOT_VERIFIED；复核不一致为 FAIL",
+      "gpu_found": true,
+      "cpu_recheck": true,
+      "hit_nonce": 308224,
+      "hit_hash_hex": "00cd81fcaec09e338c3999b05eeb191b01e24c4fa57e6f3e08dc28299d7b78f5",
+      "independent_budget": {
+        "attempts": 4294967296,
+        "seconds": 10.0,
+        "note": "正确性检验阶段的独立预算，与 fixed-work 测速预算（max_attempts_budget.per_run）严格区分，不占用用户测速预算"
+      }
+    },
+    "device_name": {
+      "value": "NVIDIA GeForce RTX 3090",
+      "source": "MEASURED"
+    },
+    "sm_count": {
+      "value": 82,
+      "source": "MEASURED"
+    },
+    "cuda_runtime_version": {
+      "value": "13.0",
+      "source": "MEASURED"
+    },
+    "driver_version": {
+      "value": "13.0",
+      "source": "MEASURED"
+    },
+    "fixed_workload": {
+      "description": "fixed-work 模式：无 H<=T 判定、无命中提前退出、Nonce 范围由预算与 32-bit 上界精确截断、受 max-attempts/rounds/seconds 三限约束（优先记录最早触发者）",
+      "max_attempts_budget": {
+        "per_run": 4294967296,
+        "requested": 4294967296,
+        "semantics": "每次运行的预算（fixed_runs 次运行各享 per_run，非共享总额）；per_run 与各次运行 echo 的 max_attempts_budget_per_run 一致；正确性检验阶段的独立预算见 correctness_check.independent_budget",
+        "source": "USER_INPUT"
+      },
+      "runs": 3,
+      "rounds_per_run": 20,
+      "results": [
+        {
+          "run": 1,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 4294967296,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.133141,
+          "hash_rate": 3229029074.4,
+          "source": "MEASURED"
+        },
+        {
+          "run": 2,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 4294967296,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.121426,
+          "hash_rate": 3540561000.1,
+          "source": "MEASURED"
+        },
+        {
+          "run": 3,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 4294967296,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.127146,
+          "hash_rate": 3381279474.0,
+          "source": "MEASURED"
+        }
+      ],
+      "total_completed_hashes": {
+        "value": 1289748480,
+        "source": "MEASURED"
+      },
+      "total_elapsed_seconds": {
+        "value": 0.381713,
+        "source": "MEASURED"
+      },
+      "hash_rate": {
+        "unit": "H/s（completed/elapsed，MEASURED）",
+        "min": 3229029074.4,
+        "median": 3381279474.0,
+        "max": 3540561000.1
+      },
+      "hash_rate_mhs": {
+        "median": 3381.279474,
+        "source": "MEASURED"
+      },
+      "hash_rate_ghs": {
+        "median": 3.381279474,
+        "source": "MEASURED"
+      }
+    },
+    "theoretical_breakdown": {
+      "integer_ops_throughput": {
+        "value": 17843200000000.0,
+        "source": "THEORETICAL",
+        "unit": "32-bit integer ops/s",
+        "formula": "SM数 × 128 CUDA核/SM × 1.70GHz × 1 INT32 op/cycle"
+      },
+      "sha256_compression_throughput": {
+        "value": 23790933333.333332,
+        "source": "THEORETICAL",
+        "unit": "SHA-256 compressions/s（绝对上界量级）",
+        "formula": "integer_ops / ~750 ops per compression（假设每周期每核1次整数运算，忽略一切开销）",
+        "caveat": "仅为不可达的绝对上界，不构成对实测值的预测"
+      },
+      "sha256d_hash_rate": {
+        "value": null,
+        "source": "THEORETICAL",
+        "note": "无可靠理论模型（压缩内部依赖链/寄存器压力/调度开销不可从规格推算），不报告理论 SHA-256d H/s；唯一可信数字是 benchmark 的 MEASURED 值"
+      }
+    },
+    "cpu_recheck": {
+      "value": "PASS",
+      "source": "MEASURED"
+    }
+  }
+}

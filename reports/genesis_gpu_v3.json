@@ -1,0 +1,26 @@
+{
+  "command": "mine",
+  "mode": "genesis",
+  "gpu_status": "GPU_RUN_FOUND",
+  "gpu": {
+    "status": "RUN_FOUND",
+    "mode": "search",
+    "device_name": "NVIDIA GeForce RTX 3090",
+    "sm_count": 82,
+    "cuda_runtime_version": "13.0",
+    "driver_version": "13.0",
+    "max_attempts_budget": 4294967296,
+    "start_nonce": 0,
+    "end_nonce": 2085093376,
+    "scheduled_attempts": 2085093376,
+    "completed_hashes": 2085042688,
+    "rounds": 97,
+    "elapsed_seconds": 0.639795,
+    "hash_rate": 3258923598.4,
+    "found": true,
+    "nonce": 2083236893,
+    "hash_hex": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "reason": "found"
+  },
+  "cpu_recheck": "PASS"
+}

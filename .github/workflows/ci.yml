@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  cpu-tests:
+    name: CPU tests (no GPU required)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install OpenSpec CLI
+        run: npm install -g @fission-ai/openspec
+
+      - name: OpenSpec strict validation
+        run: openspec validate add-bitcoin-sha256d-pow-lab --strict
+
+      - name: Genesis block verification (--verify)
+        run: python3 -m bitcoin_pow --verify
+
+      - name: Full unit tests (PoW + vectors + offline-safety + legacy regression)
+        run: python3 -m unittest discover -v
+
+      - name: GPU gate status
+        run: |
+          echo "GPU_STATUS: NOT_RUN"
+          echo "GitHub Actions runner 没有 GPU；GPU 实测在本项目维护者的 RTX 3090 上独立执行，"
+          echo "实测证据见 reports/benchmark_rtx3090.md（含复现命令）。"
+          echo "未运行的 GPU 检查一律标记 NOT_RUN，绝不伪造成 PASS。"
+
+  cuda-compile:
+    name: CUDA compile gate (sm_86, no GPU execution)
+    runs-on: ubuntu-latest
+    container:
+      image: nvidia/cuda:12.4.1-devel-ubuntu22.04   # 自带 nvcc 与 cudart 头文件
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile sha256d_miner (sm_86)
+        run: |
+          nvcc --version
+          mkdir -p cuda/build
+          nvcc -O3 -std=c++17 -arch=sm_86 -o cuda/build/sha256d_miner cuda/main.cu
+          echo "CUDA_COMPILE: PASS (sm_86)"
+
+      - name: GPU gate status
+        run: |
+          echo "GPU_STATUS: NOT_RUN"
+          echo "CI 仅验证源码可编译为 sm_86；GPU 实测必须在真实 RTX 3090 上执行。"
