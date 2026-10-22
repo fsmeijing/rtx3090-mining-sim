@@ -1,0 +1,75 @@
+{
+  "schema": "rtx3090-mining-sim/benchmark-v1",
+  "generated_at_utc": "2026-10-22T09:02:17Z",
+  "seed": null,
+  "mode": "genesis",
+  "target_hex": "00000000ffff0000000000000000000000000000000000000000000000000000",
+  "target_source": "MEASURED_NA / 派生自创世 nBits=0x1d00ffff（确定值）",
+  "target_nbits": "0x1d00ffff",
+  "hash_function": "SHA256d（SHA256(SHA256(80B header))）",
+  "offline": true,
+  "gpu_status": "RUN",
+  "gpu": {
+    "device_name": {
+      "value": "NVIDIA GeForce RTX 3090",
+      "source": "MEASURED"
+    },
+    "sm_count": {
+      "value": 82,
+      "source": "MEASURED"
+    },
+    "cuda_runtime_version": {
+      "value": "13.0",
+      "source": "MEASURED"
+    },
+    "driver_version": {
+      "value": "13.0",
+      "source": "MEASURED"
+    },
+    "nonce_range": {
+      "value": [
+        0,
+        2085093376
+      ],
+      "source": "MEASURED"
+    },
+    "attempts": {
+      "value": 2085093376,
+      "source": "MEASURED"
+    },
+    "elapsed_seconds": {
+      "value": 0.569785,
+      "source": "MEASURED"
+    },
+    "hash_rate": {
+      "value": 3659439222.3,
+      "source": "MEASURED",
+      "unit": "H/s"
+    },
+    "hash_rate_mhs": {
+      "value": 3659.4392223,
+      "source": "MEASURED",
+      "unit": "MH/s"
+    },
+    "hash_rate_ghs": {
+      "value": 3.6594392223,
+      "source": "MEASURED",
+      "unit": "GH/s"
+    },
+    "theoretical_hash_rate": {
+      "value": 17843200000000.0,
+      "source": "THEORETICAL",
+      "unit": "H/s（上界量级）",
+      "formula": "SM数 × 128 CUDA核/SM × 1.70GHz × 1 op/cycle（未考虑真实内核效率）"
+    },
+    "found": true,
+    "hit_nonce": 2083236893,
+    "hit_hash_hex": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "target_hex": "00000000ffff0000000000000000000000000000000000000000000000000000",
+    "cpu_recheck": {
+      "value": "PASS",
+      "source": "MEASURED"
+    },
+    "cpu_recheck_note": "CPU 用 Python hashlib 重建区块头并复算 SHA256d 后比对"
+  }
+}
