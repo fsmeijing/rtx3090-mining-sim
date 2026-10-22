@@ -47,6 +47,7 @@ jobs:
       - name: Compile sha256d_miner (sm_86)
         run: |
           nvcc --version
+          mkdir -p cuda/build
           nvcc -O3 -std=c++17 -arch=sm_86 -o cuda/build/sha256d_miner cuda/main.cu
           echo "CUDA_COMPILE: PASS (sm_86)"
 
