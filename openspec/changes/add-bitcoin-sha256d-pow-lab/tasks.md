@@ -33,5 +33,5 @@
 
 ## 6. 阶段 E：CI 与交付
 - [x] 6.1 `.github/workflows/ci.yml`：CPU 测试 + 创世验证 + 向量 + nBits + Nonce 正确性 + 回归 + openspec 严格验证 + CUDA 编译门禁（GPU 实测 NOT_RUN）
-- [ ] 6.2 推送 `feat/bitcoin-sha256d-pow-lab`，创建 PR，CI 全绿
-- [ ] 6.3 汇总验收清单与最终报告
+- [x] 6.2 推送 `feat/bitcoin-sha256d-pow-lab`，创建 PR，CI 全绿
+- [x] 6.3 汇总验收清单与最终报告
