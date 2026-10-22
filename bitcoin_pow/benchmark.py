@@ -164,11 +164,19 @@ def run_benchmark(
 
     smi = _nvidia_smi_info()
 
+    # 有效预算：与二进制内 hard cap（2^40）一致，per_run 与逐次 echo 必须一致
+    max_attempts_hardcap = 1 << 40
+    effective_budget = min(max_attempts, max_attempts_hardcap)
+
     # ---- 1. 正确性检验：search easy 命中 + CPU 复核 ----
+    # 独立预算：与 fixed-work 测速预算严格区分，不占用/不消费用户预算。
+    check_budget_attempts = 1 << 32
+    check_budget_seconds = 10.0
     try:
         check_raw = runner.mine(
             header, mode_target(MODE_EASY), start_nonce=0,
-            seconds=10.0, max_attempts=1 << 32, mode="search",
+            seconds=check_budget_seconds, max_attempts=check_budget_attempts,
+            mode="search",
         )
     except (GpuParameterError, GpuExecutionError) as exc:
         base.update({
@@ -177,11 +185,21 @@ def run_benchmark(
             "gpu": None,
         })
         return base
-    check_ok = recheck_gpu_result(header, mode_target(MODE_EASY), check_raw)
+    # 正确性门禁：必须 GPU 确实命中（found=True）且 CPU 复核通过才允许 PASS。
+    # recheck_gpu_result 在 found=False 时平凡返回 True，绝不能据此报告成功。
+    check_found = bool(check_raw.get("found"))
+    check_recheck = recheck_gpu_result(header, mode_target(MODE_EASY), check_raw)
+    if check_found and check_recheck:
+        check_value = "PASS"
+    elif not check_found:
+        check_value = "NOT_VERIFIED"   # GPU 未命中：无法验证，绝不伪造 PASS
+    else:
+        check_value = "FAIL"           # 命中但 CPU 复核不一致
 
     # ---- 2. 固定工作量吞吐统计（无命中提前退出，多次运行） ----
     # max-attempts 语义：**每次运行的预算**（各次运行独立享有，
     # 非所有运行共享的总额），与 CLI/JSON/OpenSpec/文档保持一致。
+    # 修复：必须传递用户实际指定的预算，禁止硬编码 1 << 40。
     runs = []
     status = GPU_RUN_NO_HIT
     error_note = None
@@ -189,7 +207,7 @@ def run_benchmark(
         try:
             raw = runner.mine(
                 header, None, start_nonce=0,
-                seconds=seconds, max_attempts=1 << 40,
+                seconds=seconds, max_attempts=effective_budget,
                 mode="fixed-work", rounds=fixed_rounds,
             )
         except (GpuParameterError, GpuExecutionError) as exc:
@@ -219,7 +237,7 @@ def run_benchmark(
 
     if status == GPU_ERROR:
         base.update({"gpu_status": GPU_ERROR, "gpu_status_note": error_note,
-                     "gpu": {"correctness_check": check_ok}})
+                     "gpu": {"correctness_check": {"value": check_value}}})
         return base
 
     base.update({
@@ -227,11 +245,19 @@ def run_benchmark(
         "gpu_status_note": "固定工作量模式正常执行、无命中属于预期（found=false），GPU_STATUS=RUN",
         "gpu": {
             "correctness_check": {
-                "value": "PASS" if check_ok else "FAIL",
+                "value": check_value,
                 "source": "MEASURED",
                 "method": "search 模式 easy 目标命中 Nonce 后，CPU 用 hashlib 重建区块头复算比对",
-                "hit_nonce": check_raw.get("nonce"),
-                "hit_hash_hex": check_raw.get("hash_hex"),
+                "gate": "PASS 当且仅当 GPU found=true 且 CPU 复核一致；未命中为 NOT_VERIFIED；复核不一致为 FAIL",
+                "gpu_found": check_found,
+                "cpu_recheck": check_recheck,
+                "hit_nonce": check_raw.get("nonce") if check_found else None,
+                "hit_hash_hex": check_raw.get("hash_hex") if check_found else None,
+                "independent_budget": {
+                    "attempts": check_budget_attempts,
+                    "seconds": check_budget_seconds,
+                    "note": "正确性检验阶段的独立预算，与 fixed-work 测速预算（max_attempts_budget.per_run）严格区分，不占用用户测速预算",
+                },
             },
             "device_name": {"value": check_raw.get("device_name"), "source": "MEASURED"},
             "sm_count": {"value": check_raw.get("sm_count"), "source": "MEASURED"},
@@ -241,8 +267,9 @@ def run_benchmark(
             "fixed_workload": {
                 "description": "fixed-work 模式：无 H<=T 判定、无命中提前退出、Nonce 范围由预算与 32-bit 上界精确截断、受 max-attempts/rounds/seconds 三限约束（优先记录最早触发者）",
                 "max_attempts_budget": {
-                    "per_run": max_attempts,
-                    "semantics": "每次运行的预算（fixed_runs 次运行各享 max_attempts，非共享总额）；本次运行各次实际 reason 见 runs[].reason",
+                    "per_run": effective_budget,
+                    "requested": max_attempts,
+                    "semantics": "每次运行的预算（fixed_runs 次运行各享 per_run，非共享总额）；per_run 与各次运行 echo 的 max_attempts_budget_per_run 一致；正确性检验阶段的独立预算见 correctness_check.independent_budget",
                     "source": "USER_INPUT",
                 },
                 "runs": fixed_runs,
@@ -266,7 +293,7 @@ def run_benchmark(
                 },
             },
             "theoretical_breakdown": _theoretical_breakdown(check_raw.get("sm_count")),
-            "cpu_recheck": {"value": "PASS" if check_ok else "FAIL", "source": "MEASURED"},
+            "cpu_recheck": {"value": check_value, "source": "MEASURED"},
         },
     })
     return base

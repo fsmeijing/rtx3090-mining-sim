@@ -43,11 +43,23 @@ max-attempts 语义（CLI/JSON/OpenSpec/文档一致）：**每次运行的预�
 
 | 模式 | min | median | max | 每次运行 completed | reasons |
 |---|---:|---:|---:|---:|---|
-| medium | 3.42 GH/s | **3.44 GH/s** | 3.46 GH/s | 429,916,160 | rounds-done ×3 |
-| genesis | 3.11 GH/s | **3.46 GH/s** | 3.49 GH/s | 429,916,160 | rounds-done ×3 |
+| medium | 3.42 GH/s | **4.00 GH/s** | 4.01 GH/s | 429,916,160 | rounds-done ×3 |
+| genesis | 3.23 GH/s | **3.38 GH/s** | 3.54 GH/s | 429,916,160 | rounds-done ×3 |
 
 每次运行 scheduled_attempts == completed_hashes == 429,916,160
 （= 20 轮 × 82SM×16块×256线程×64迭代，每次运行预算 2^32 未先耗尽）。
+
+## 3.1 预算参数传递验收（MEASURED，2026-10-22 修复后）
+
+`--benchmark --gpu --max-attempts N`（每次 fixed_runs=3，JSON 见
+`reports/benchmark_budget_N.json`）；正确性检验 PASS（独立预算 1<<32，
+与测速预算严格区分）：
+
+| max-attempts | per_run | 逐次 echo | 每次实际 completed | reason |
+|---:|---:|---:|---:|---|
+| 1 | 1 | 1 ×3 | 1（≤1） | max-attempts |
+| 1000 | 1000 | 1000 ×3 | 1000（≤1000） | max-attempts |
+| 16385 | 16385 | 16385 ×3 | 16385（≤16385） | max-attempts |
 
 ## 4. 预算边界实测（MEASURED，逐项）
 

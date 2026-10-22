@@ -55,3 +55,10 @@
 - [x] 8.5 新增 tests/test_budget_contract.py（18 项：search 1/1000/16383/16384/16385、fixed-work 1/1000/16385、尾部 Nonce、提前命中、时间限制、三限优先级、参数拒绝、内部一致性；无 GPU 环境显式 SKIP）
 - [x] 8.6 RTX 3090 实测：预算边界逐项验证 + genesis 复算（CPU MATCH / GPU 复现真实 Nonce）+ fixed-work benchmark 3 次
 - [x] 8.7 文档/README/reports 同步 per-run 语义与新实测数据
+
+## 9. PR #1 预算参数传递与正确性门禁修复（最终审查）
+- [x] 9.1 benchmark.py fixed-work mine() 传递用户实际预算（修复硬编码 1 << 40 遗漏）
+- [x] 9.2 max_attempts_budget.per_run 与逐次 max_attempts_budget_per_run 一致（effective_budget = min(用户, 2^40)，JSON 增加 requested 字段）
+- [x] 9.3 正确性门禁：PASS 当且仅当 GPU found=true 且 CPU 复核通过；未命中 NOT_VERIFIED（不伪造 PASS）；复核不一致 FAIL；检查阶段独立预算（1<<32）在 JSON 中明确标注与测速预算区分
+- [x] 9.4 新增 tests/test_benchmark_budget.py（9 项：传参捕获回归、默认预算透传、独立预算区分、门禁三分支、真机 1/1000/16385）
+- [x] 9.5 RTX 3090 实测：--benchmark --gpu --max-attempts 1/1000/16385，每次 fixed-work 完成数 <= 预算

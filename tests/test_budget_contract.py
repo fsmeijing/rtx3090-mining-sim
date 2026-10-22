@@ -44,9 +44,14 @@ def _invariant_ok(raw, max_attempts):
     elapsed = raw["elapsed_seconds"]
     if elapsed > 0:
         expect = raw["completed_hashes"] / elapsed
-        # elapsed 打印保留 6 位小数，rate 为十亿量级 → 用相对容差
-        if abs(raw["hash_rate"] - expect) > max(1.0, expect * 1e-3):
-            problems.append("hash_rate != completed/elapsed")
+        # elapsed 打印保留 6 位小数：亚毫秒级时打印精度不足以支撑
+        # 相对 1e-3 校验（1 次哈希 ~几微秒，截断误差可达两位数百分比），
+        # 此时只验证 rate 为正且与 completed 方向一致。
+        if elapsed >= 0.001:
+            if abs(raw["hash_rate"] - expect) > max(1.0, expect * 1e-3):
+                problems.append("hash_rate != completed/elapsed")
+        elif raw["completed_hashes"] > 0 and raw["hash_rate"] <= 0:
+            problems.append("hash_rate <= 0 with completed > 0")
     if raw["found"] and raw["completed_hashes"] > raw["scheduled_attempts"]:
         problems.append("hit but completed > scheduled")
     return problems
