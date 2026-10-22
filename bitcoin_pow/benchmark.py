@@ -129,8 +129,8 @@ def run_benchmark(
         "hash_function": "SHA256d（SHA256(SHA256(80B header))）",
         "offline": True,
         "statistics_contract": {
-            "scheduled_attempts": "已分配工作量（可能未完成）",
-            "completed_hashes": "内核实际完成哈希数",
+            "scheduled_attempts": "有效分配的候选 Nonce 数量（精确窗口，<= max_attempts）",
+            "completed_hashes": "内核实际完成哈希数（atomicAdd，<= scheduled_attempts）",
             "hash_rate": "completed_hashes / elapsed_seconds（MEASURED）",
         },
     }
@@ -179,7 +179,9 @@ def run_benchmark(
         return base
     check_ok = recheck_gpu_result(header, mode_target(MODE_EASY), check_raw)
 
-    # ---- 2. 固定工作量吞吐统计（无提前退出，多次运行） ----
+    # ---- 2. 固定工作量吞吐统计（无命中提前退出，多次运行） ----
+    # max-attempts 语义：**每次运行的预算**（各次运行独立享有，
+    # 非所有运行共享的总额），与 CLI/JSON/OpenSpec/文档保持一致。
     runs = []
     status = GPU_RUN_NO_HIT
     error_note = None
@@ -200,6 +202,7 @@ def run_benchmark(
             "run": i + 1,
             "start_nonce": raw["start_nonce"],
             "end_nonce": raw["end_nonce"],
+            "max_attempts_budget_per_run": raw["max_attempts_budget"],
             "scheduled_attempts": raw["scheduled_attempts"],
             "completed_hashes": completed,
             "rounds": raw["rounds"],
@@ -236,7 +239,12 @@ def run_benchmark(
             "driver_version": {"value": check_raw.get("driver_version") or smi.get("driver_version"),
                                 "source": "MEASURED"},
             "fixed_workload": {
-                "description": "fixed-work 模式：无 H<=T 判定、无提前退出、Nonce 范围预设、32-bit 上界截断",
+                "description": "fixed-work 模式：无 H<=T 判定、无命中提前退出、Nonce 范围由预算与 32-bit 上界精确截断、受 max-attempts/rounds/seconds 三限约束（优先记录最早触发者）",
+                "max_attempts_budget": {
+                    "per_run": max_attempts,
+                    "semantics": "每次运行的预算（fixed_runs 次运行各享 max_attempts，非共享总额）；本次运行各次实际 reason 见 runs[].reason",
+                    "source": "USER_INPUT",
+                },
                 "runs": fixed_runs,
                 "rounds_per_run": fixed_rounds,
                 "results": runs,

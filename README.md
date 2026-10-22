@@ -45,14 +45,15 @@ CLI 完整支持：`--verify` / `--mode easy|medium|genesis` / `--benchmark` / `
 
 ### 实测算力（真实测量，非理论值；固定工作量口径）
 
-| 模式 | min | median | max | 3 次累计 completed | CPU 复核 |
+| 模式 | min | median | max | 每次运行 completed | CPU 复核 |
 |---|---:|---:|---:|---:|---|
-| medium（20 轮/次） | 3.53 GH/s | 3.53 GH/s | 3.94 GH/s | 1,289,748,480 | PASS |
-| genesis（20 轮/次） | 3.72 GH/s | 3.74 GH/s | 3.93 GH/s | 1,289,748,480 | PASS |
+| medium（20 轮/次） | 3.42 GH/s | 3.44 GH/s | 3.46 GH/s | 429,916,160 | PASS |
+| genesis（20 轮/次） | 3.11 GH/s | 3.46 GH/s | 3.49 GH/s | 429,916,160 | PASS |
 
-- 统计契约：`hash_rate = completed_hashes / elapsed`；命中后提前退出的
-  线程工作量只计入 `scheduled_attempts`，**绝不冒充已完成**。
-- 创世搜索模式实测 0.555s 命中真实 Nonce 2,083,236,893（复现创世哈希）。
+- **精确预算契约**：`completed_hashes <= scheduled_attempts <= max_attempts`
+  恒成立；窗口外线程不执行任何 SHA-256d；max-attempts 为**每次运行的预算**
+  （CLI/JSON/OpenSpec/文档一致）。
+- 创世搜索模式实测 0.640s 命中真实 Nonce 2,083,236,893（复现创世哈希）。
 - 理论层仅报告整数操作吞吐（≈17.8 T INT32 ops/s，THEORETICAL）与
   SHA-256 压缩上界量级；**不报告无可靠模型的"理论 SHA-256d 算力"**。
   详见 [reports/benchmark_rtx3090.md](reports/benchmark_rtx3090.md)。

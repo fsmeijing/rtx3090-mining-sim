@@ -1,6 +1,6 @@
 {
   "schema": "rtx3090-mining-sim/benchmark-v2",
-  "generated_at_utc": "2026-10-22T09:39:33Z",
+  "generated_at_utc": "2026-10-22T10:23:25Z",
   "seed": null,
   "mode": "genesis",
   "target_hex": "00000000ffff0000000000000000000000000000000000000000000000000000",
@@ -9,8 +9,8 @@
   "hash_function": "SHA256d（SHA256(SHA256(80B header))）",
   "offline": true,
   "statistics_contract": {
-    "scheduled_attempts": "已分配工作量（可能未完成）",
-    "completed_hashes": "内核实际完成哈希数",
+    "scheduled_attempts": "有效分配的候选 Nonce 数量（精确窗口，<= max_attempts）",
+    "completed_hashes": "内核实际完成哈希数（atomicAdd，<= scheduled_attempts）",
     "hash_rate": "completed_hashes / elapsed_seconds（MEASURED）"
   },
   "gpu_status": "GPU_RUN_NO_HIT",
@@ -20,8 +20,8 @@
       "value": "PASS",
       "source": "MEASURED",
       "method": "search 模式 easy 目标命中 Nonce 后，CPU 用 hashlib 重建区块头复算比对",
-      "hit_nonce": 2567808,
-      "hit_hash_hex": "005dd34a671c660ed86b35fc661caea2d686292b71c52bad729243ffa5065749"
+      "hit_nonce": 2339456,
+      "hit_hash_hex": "00f0516d1ed34954d9377240b1b9a0ad6be993cd560c522da4253fa8e7d41aff"
     },
     "device_name": {
       "value": "NVIDIA GeForce RTX 3090",
@@ -40,7 +40,12 @@
       "source": "MEASURED"
     },
     "fixed_workload": {
-      "description": "fixed-work 模式：无 H<=T 判定、无提前退出、Nonce 范围预设、32-bit 上界截断",
+      "description": "fixed-work 模式：无 H<=T 判定、无命中提前退出、Nonce 范围由预算与 32-bit 上界精确截断、受 max-attempts/rounds/seconds 三限约束（优先记录最早触发者）",
+      "max_attempts_budget": {
+        "per_run": 4294967296,
+        "semantics": "每次运行的预算（fixed_runs 次运行各享 max_attempts，非共享总额）；本次运行各次实际 reason 见 runs[].reason",
+        "source": "USER_INPUT"
+      },
       "runs": 3,
       "rounds_per_run": 20,
       "results": [
@@ -48,36 +53,39 @@
           "run": 1,
           "start_nonce": 0,
           "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 1099511627776,
           "scheduled_attempts": 429916160,
           "completed_hashes": 429916160,
           "rounds": 20,
           "reason": "rounds-done",
-          "elapsed_seconds": 0.11496,
-          "hash_rate": 3739702157.3,
+          "elapsed_seconds": 0.138079,
+          "hash_rate": 3113552097.0,
           "source": "MEASURED"
         },
         {
           "run": 2,
           "start_nonce": 0,
           "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 1099511627776,
           "scheduled_attempts": 429916160,
           "completed_hashes": 429916160,
           "rounds": 20,
           "reason": "rounds-done",
-          "elapsed_seconds": 0.115469,
-          "hash_rate": 3723217140.5,
+          "elapsed_seconds": 0.123095,
+          "hash_rate": 3492555830.9,
           "source": "MEASURED"
         },
         {
           "run": 3,
           "start_nonce": 0,
           "end_nonce": 429916160,
+          "max_attempts_budget_per_run": 1099511627776,
           "scheduled_attempts": 429916160,
           "completed_hashes": 429916160,
           "rounds": 20,
           "reason": "rounds-done",
-          "elapsed_seconds": 0.109428,
-          "hash_rate": 3928758270.3,
+          "elapsed_seconds": 0.124278,
+          "hash_rate": 3459310256.0,
           "source": "MEASURED"
         }
       ],
@@ -86,21 +94,21 @@
         "source": "MEASURED"
       },
       "total_elapsed_seconds": {
-        "value": 0.339857,
+        "value": 0.385452,
         "source": "MEASURED"
       },
       "hash_rate": {
         "unit": "H/s（completed/elapsed，MEASURED）",
-        "min": 3723217140.5,
-        "median": 3739702157.3,
-        "max": 3928758270.3
+        "min": 3113552097.0,
+        "median": 3459310256.0,
+        "max": 3492555830.9
       },
       "hash_rate_mhs": {
-        "median": 3739.7021573,
+        "median": 3459.310256,
         "source": "MEASURED"
       },
       "hash_rate_ghs": {
-        "median": 3.7397021573,
+        "median": 3.459310256,
         "source": "MEASURED"
       }
     },

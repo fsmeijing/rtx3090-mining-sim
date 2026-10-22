@@ -1,0 +1,20 @@
+{
+  "status": "RUN_NO_HIT",
+  "mode": "search",
+  "device_name": "NVIDIA GeForce RTX 3090",
+  "sm_count": 82,
+  "cuda_runtime_version": "13.0",
+  "driver_version": "13.0",
+  "max_attempts_budget": 16383,
+  "start_nonce": 0,
+  "end_nonce": 16383,
+  "scheduled_attempts": 16383,
+  "completed_hashes": 16383,
+  "rounds": 1,
+  "elapsed_seconds": 0.000843,
+  "hash_rate": 19436607.7,
+  "found": false,
+  "nonce": 0,
+  "hash_hex": "",
+  "reason": "max-attempts"
+}

@@ -46,3 +46,12 @@
 - [x] 7.7 构建清理：CMake 无 CUDA_HOME/CXX 行为修复、git rm --cached 二进制
 - [x] 7.8 RTX 3090 复测：genesis 复核 PASS、固定工作量 benchmark（median 3.74 GH/s genesis / 3.53 GH/s medium）
 - [x] 7.9 文档与报告同步勘误（docs/09、docs/10、reports/、README）
+
+## 8. PR #1 预算边界修复（最终）
+- [x] 8.1 问题 A：search 模式精确预算 —— Host 端窗口 [start, min(剩余预算, 2^32, GPU覆盖))，window_end 传入 Kernel，窗口外不执行 SHA-256d，尾部不足一个 block 正确处理
+- [x] 8.2 不变式 completed <= scheduled <= max_attempts 恒成立；禁止改统计值掩盖超算
+- [x] 8.3 问题 B：fixed-work 严格 max-attempts（每次运行预算语义）；rounds/seconds/预算三限，reason 记录最早触发者（time-limit > rounds-done > max-attempts）
+- [x] 8.4 Python CLI 传递预算参数；JSON 增 max_attempts_budget（per_run + semantics）
+- [x] 8.5 新增 tests/test_budget_contract.py（18 项：search 1/1000/16383/16384/16385、fixed-work 1/1000/16385、尾部 Nonce、提前命中、时间限制、三限优先级、参数拒绝、内部一致性；无 GPU 环境显式 SKIP）
+- [x] 8.6 RTX 3090 实测：预算边界逐项验证 + genesis 复算（CPU MATCH / GPU 复现真实 Nonce）+ fixed-work benchmark 3 次
+- [x] 8.7 文档/README/reports 同步 per-run 语义与新实测数据

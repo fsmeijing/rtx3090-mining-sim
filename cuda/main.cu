@@ -1,29 +1,32 @@
 // main.cu — RTX 3090 比特币 SHA-256d Nonce 搜索（教学用途，完全离线）
 //
 // 与 Python 端的契约（bitcoin_pow/gpu.py）：
-//   sha256d_miner --header-hex <160 hex> --target-hex <64 hex>
-//                 --start-nonce N --seconds S --max-attempts N
-//                 [--mode search|fixed-work] [--rounds R] [--json]
+//   sha256d_miner --header-hex <160 hex> [--target-hex <64 hex>]
+//                 --mode search|fixed-work --start-nonce N --seconds S
+//                 --max-attempts N [--rounds R] [--json]
 //   退出码：0 = 正常执行（含未命中）；2 = 参数错误；3 = CUDA 执行错误。
 //   JSON 状态：status ∈ {"RUN_FOUND","RUN_NO_HIT"}（参数/CUDA 错误不产出 JSON，
 //             只输出 stderr 与非零退出码）。
 //
-// 诚实统计契约：
-//   scheduled_attempts = 每轮 blocks×threads×iters 的累计分配量；
-//   completed_hashes   = 内核 atomicAdd 累计的实际完成哈希数
-//                       （提前退出/Nonce 越界的线程不计入）；
-//   hash_rate          = completed_hashes / elapsed_seconds。
-//   绝不把"已分配但未完成"的工作量冒充算力。
+// 精确预算契约（v3）：
+//   * Host 端为每轮 launch 确定精确的 Nonce 窗口 [window_start, window_end)：
+//       window_end = min(start + 剩余预算, 2^32, start + GPU单轮覆盖)
+//   * 窗口上界传入 Kernel；线程只计算 nonce < window_end 的哈希，
+//     窗口外的线程/迭代不执行任何 SHA-256d。
+//   * scheduled_attempts = Σ(window_end - window_start)   —— 有效分配的候选
+//     Nonce 数量（精确，不再是"整块分配"的粗略值）。
+//   * completed_hashes   = Kernel atomicAdd 累计的实际完成 SHA-256d 数。
+//   * 不变式：completed <= scheduled <= max_attempts（命中提前退出时
+//     completed 进一步减小，差值如实保留）。
 //
 // 固定工作量模式（--mode fixed-work）：
-//   不做 H<=T 判定、不提前退出；Nonce 范围由 --start-nonce 与轮数参数
-//   预先确定；32-bit Nonce 上界处截断并如实报告；受 --seconds 上限约束。
+//   不做 H<=T 判定、不因命中提前退出；严格受 max-attempts（每次运行的
+//   预算）、--rounds、--seconds 三重限制，优先记录最早触发的结束条件。
 //
 // 安全边界：
-//   * 每轮 kernel launch 的每线程迭代数上限（--iters ≤ 4096）。
+//   * 每轮 launch 的每线程迭代数上限（--iters ≤ 4096）。
 //   * 所有 CUDA API 调用检查返回码；内核启动后检查 cudaGetLastError。
-//   * 参数非法（seconds<=0、max-attempts<1、start-nonce 超界等）一律 exit 2。
-//   * 最终"成功"必须由 Python 端 CPU 复核确认。
+//   * 参数非法一律 exit 2；CUDA 错误 exit 3。
 
 #include <cuda_runtime.h>
 
@@ -44,7 +47,7 @@
 namespace {
 
 constexpr int kDefaultThreadsPerBlock = 256;
-constexpr int kDefaultBlocksMultiplier = 16;   // 每 SM 的 block 数
+constexpr int kDefaultBlocksMultiplier = 16;   // 每 SM 的 block 数（并行度上限）
 constexpr int kDefaultItersPerThread = 64;
 constexpr unsigned long long kMaxAttemptsHardCap = 1ULL << 40;
 constexpr unsigned long long kNonceSpace = 0x100000000ULL;  // 2^32
@@ -64,7 +67,7 @@ struct Options {
     int iters = kDefaultItersPerThread;
     int threads_per_block = kDefaultThreadsPerBlock;
     int blocks_multiplier = kDefaultBlocksMultiplier;
-    unsigned long long rounds = 0;          // fixed-work 模式：0 = 按 seconds 跑满
+    unsigned long long rounds = 0;          // fixed-work 模式：0 = 不限轮数
 };
 
 #define CUDA_CHECK(call)                                                     \
@@ -153,17 +156,19 @@ struct DeviceResult {
     uint32_t digest[8] = {0};            // SHA-256 输出大端字
 };
 
-// 搜索内核：命中即 atomicCAS 写回；completed 累计实际完成的哈希数。
+// 搜索内核：窗口 [window_start, window_end) 内逐 Nonce 计算；
+// nonce >= window_end 的迭代直接 break，不执行任何 SHA-256d。
+// completed 只累计真实完成的哈希数（atomicAdd）。
 __global__ void sha256d_mine_kernel(const uint32_t* header,   // 20 字
                                     const uint32_t* target,   // 8 字
-                                    unsigned long long start_nonce,
+                                    unsigned long long window_start,
+                                    unsigned long long window_end,
                                     int iters,
                                     DeviceResult* result,
                                     unsigned long long* completed) {
     const uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned long long base =
-        start_nonce + (unsigned long long)tid * (unsigned long long)iters;
-    if (base >= kNonceSpace) return;                       // 本线程无合法 Nonce
+    const unsigned long long base = window_start + (unsigned long long)tid * iters;
+    if (base >= window_end) return;                        // 窗口外线程：不计算
 
     uint32_t local[20];
 #pragma unroll
@@ -172,7 +177,7 @@ __global__ void sha256d_mine_kernel(const uint32_t* header,   // 20 字
     unsigned long long done = 0;
     for (int j = 0; j < iters; ++j) {
         const unsigned long long nonce = base + (unsigned long long)j;
-        if (nonce >= kNonceSpace) break;                   // 32-bit Nonce 上界
+        if (nonce >= window_end) break;                    // 精确预算上界
         if (result->found) break;                          // 命中后提前退出
         local[19] = bitcoin_pow::bswap32((uint32_t)nonce); // 协议小端 Nonce
         uint32_t digest[8];
@@ -190,17 +195,17 @@ __global__ void sha256d_mine_kernel(const uint32_t* header,   // 20 字
     if (done > 0) atomicAdd(completed, done);              // 只统计真实完成量
 }
 
-// 固定工作量内核：无目标判定、无提前退出，跑满分配的 Nonce 区间。
+// 固定工作量内核：无目标判定、无命中提前退出，但同样受窗口上界约束。
 // sink 防止编译器把"结果未被使用"的哈希计算优化掉。
 __global__ void sha256d_fixed_kernel(const uint32_t* header,  // 20 字
-                                     unsigned long long start_nonce,
+                                     unsigned long long window_start,
+                                     unsigned long long window_end,
                                      int iters,
                                      DeviceResult* result,    // 仅作防优化 sink
                                      unsigned long long* completed) {
     const uint32_t tid = blockIdx.x * blockDim.x + threadIdx.x;
-    const unsigned long long base =
-        start_nonce + (unsigned long long)tid * (unsigned long long)iters;
-    if (base >= kNonceSpace) return;
+    const unsigned long long base = window_start + (unsigned long long)tid * iters;
+    if (base >= window_end) return;
 
     uint32_t local[20];
 #pragma unroll
@@ -210,7 +215,7 @@ __global__ void sha256d_fixed_kernel(const uint32_t* header,  // 20 字
     uint32_t sink = 0;
     for (int j = 0; j < iters; ++j) {
         const unsigned long long nonce = base + (unsigned long long)j;
-        if (nonce >= kNonceSpace) break;                   // 32-bit 上界截断
+        if (nonce >= window_end) break;                    // 精确预算上界
         local[19] = bitcoin_pow::bswap32((uint32_t)nonce);
         uint32_t digest[8];
         bitcoin_pow::sha256d_header(local, digest);
@@ -249,6 +254,7 @@ void print_json(const cudaDeviceProp& prop, int sm_count,
            runtime_version / 1000, (runtime_version % 1000) / 10);
     printf("  \"driver_version\": \"%d.%d\",\n",
            driver_version / 1000, (driver_version % 1000) / 10);
+    printf("  \"max_attempts_budget\": %llu,\n", opt.max_attempts);
     printf("  \"start_nonce\": %llu,\n", nonce_begin);
     printf("  \"end_nonce\": %llu,\n", nonce_end);
     printf("  \"scheduled_attempts\": %llu,\n", scheduled);
@@ -391,6 +397,11 @@ int main(int argc, char** argv) {
                    std::chrono::steady_clock::now() - t0).count();
     };
 
+    // GPU 单轮最大覆盖（并行度上限）：sm×multiplier 个 block
+    const unsigned long long gpu_cover_max =
+        (unsigned long long)sm_count * opt.blocks_multiplier *
+        (unsigned long long)opt.threads_per_block * (unsigned long long)opt.iters;
+
     unsigned long long scheduled = 0, completed = 0;
     unsigned long long nonce_begin = opt.start_nonce, nonce_end = opt.start_nonce;
     int rounds_done = 0;
@@ -398,34 +409,43 @@ int main(int argc, char** argv) {
     bool found = false;
     std::string reason;
 
-    // ---- 固定工作量模式：预先确定 Nonce 范围，跑满，不因命中提前退出 ----
+    // 计算一轮窗口：窗口上界 = min(剩余预算, 2^32, GPU单轮覆盖)
+    auto next_window = [&](unsigned long long budget_left)
+        -> std::pair<unsigned long long, int> {
+        const unsigned long long range_end =
+            std::min(nonce_begin + budget_left, kNonceSpace);
+        const unsigned long long window_end =
+            std::min(range_end, nonce_begin + gpu_cover_max);
+        const unsigned long long span = window_end - nonce_begin;
+        const unsigned long long per_thread_work =
+            (unsigned long long)opt.threads_per_block * (unsigned long long)opt.iters;
+        const int blocks = (int)((span + per_thread_work - 1) / per_thread_work);
+        return {window_end, blocks};
+    };
+
+    // ---- 固定工作量模式：无命中判定，受 rounds/seconds/max-attempts 三限 ----
+    // reason 优先记录最早触发的结束条件（同刻触发时按 time > rounds > budget
+    // 的顺序判定，该顺序已在文档中说明）。
     if (opt.mode == "fixed-work") {
-        unsigned long long round = 0;
         while (true) {
-            if (opt.rounds > 0 && round >= opt.rounds) { reason = "rounds-done"; break; }
             elapsed = elapsed_now();
             if (elapsed >= opt.seconds) { reason = "time-limit"; break; }
+            if (opt.rounds > 0 && (unsigned long long)rounds_done >= opt.rounds) {
+                reason = "rounds-done";
+                break;
+            }
+            const unsigned long long budget_left = opt.max_attempts - scheduled;
+            if (budget_left == 0) { reason = "max-attempts"; break; }
             if (nonce_begin >= kNonceSpace) { reason = "nonce-space-exhausted"; break; }
 
-            // 本轮可用 Nonce 空间决定 blocks 数（32-bit 边界截断，向上取整）
-            const unsigned long long remaining = kNonceSpace - nonce_begin;
-            const unsigned long long threads = (unsigned long long)opt.threads_per_block;
-            const unsigned long long max_thread_work =
-                (remaining + threads - 1) / threads;               // ceil
-            int blocks = (int)std::min<unsigned long long>(
-                (unsigned long long)(sm_count * opt.blocks_multiplier),
-                (max_thread_work + (unsigned long long)opt.iters - 1) /
-                    (unsigned long long)opt.iters);                // ceil
+            const auto [window_end, blocks] = next_window(budget_left);
             if (blocks <= 0) { reason = "nonce-space-exhausted"; break; }
-            const unsigned long long per_launch =
-                (unsigned long long)blocks * (unsigned long long)opt.threads_per_block *
-                (unsigned long long)opt.iters;
 
             host_completed = 0;
             CUDA_CHECK(cudaMemcpy(d_completed, &host_completed,
                                   sizeof(unsigned long long), cudaMemcpyHostToDevice));
             sha256d_fixed_kernel<<<blocks, opt.threads_per_block>>>(
-                d_header, nonce_begin, opt.iters, d_result, d_completed);
+                d_header, nonce_begin, window_end, opt.iters, d_result, d_completed);
             cudaError_t kerr = cudaGetLastError();
             if (kerr != cudaSuccess) {
                 fprintf(stderr, "CUDA_ERROR kernel launch: %s\n",
@@ -436,16 +456,14 @@ int main(int argc, char** argv) {
             CUDA_CHECK(cudaMemcpy(&host_completed, d_completed,
                                   sizeof(unsigned long long), cudaMemcpyDeviceToHost));
 
-            scheduled += per_launch;
-            completed += host_completed;
-            nonce_end = std::min(nonce_begin + per_launch, kNonceSpace);
-            nonce_begin = nonce_end;
-            ++round;
+            scheduled += window_end - nonce_begin;   // 精确有效分配
+            completed += host_completed;             // 实际完成量
+            nonce_end = window_end;
+            nonce_begin = window_end;
             ++rounds_done;
         }
         elapsed = elapsed_now();
         reason = reason.empty() ? "done" : reason;
-        found = false;
         print_json(prop, sm_count, runtime_version, driver_version, opt,
                    "RUN_NO_HIT", reason, scheduled, completed, elapsed,
                    rounds_done, opt.start_nonce, nonce_end, false, 0, "");
@@ -454,33 +472,16 @@ int main(int argc, char** argv) {
         return kExitOk;
     }
 
-    // ---- 搜索模式：命中或上限，completed 只计实际完成 ----
+    // ---- 搜索模式：窗口 + 命中提前退出，预算精确 ----
     while (true) {
         elapsed = elapsed_now();
         if (elapsed >= opt.seconds) { reason = "time-limit"; break; }
-        if (scheduled >= opt.max_attempts) { reason = "max-attempts"; break; }
+        const unsigned long long budget_left = opt.max_attempts - scheduled;
+        if (budget_left == 0) { reason = "max-attempts"; break; }
         if (nonce_begin >= kNonceSpace) { reason = "nonce-space-exhausted"; break; }
 
-        // 按剩余 Nonce 空间与 max-attempts 余额收缩本轮规模（向上取整）
-        const unsigned long long remaining_nonce = kNonceSpace - nonce_begin;
-        const unsigned long long attempts_budget = opt.max_attempts - scheduled;
-        const unsigned long long threads = (unsigned long long)opt.threads_per_block;
-        const unsigned long long max_thread_work =
-            (remaining_nonce + threads - 1) / threads;             // ceil
-        int blocks = (int)std::min<unsigned long long>(
-            (unsigned long long)(sm_count * opt.blocks_multiplier),
-            (max_thread_work + (unsigned long long)opt.iters - 1) /
-                (unsigned long long)opt.iters);                    // ceil
-        while ((unsigned long long)blocks *
-                   (unsigned long long)opt.threads_per_block *
-                   (unsigned long long)opt.iters > attempts_budget &&
-               blocks > 1) {
-            blocks /= 2;
-        }
+        const auto [window_end, blocks] = next_window(budget_left);
         if (blocks <= 0) { reason = "nonce-space-exhausted"; break; }
-        const unsigned long long per_launch =
-            (unsigned long long)blocks * (unsigned long long)opt.threads_per_block *
-            (unsigned long long)opt.iters;
 
         host_result.found = 0;
         host_completed = 0;
@@ -489,7 +490,8 @@ int main(int argc, char** argv) {
         CUDA_CHECK(cudaMemcpy(d_completed, &host_completed,
                               sizeof(unsigned long long), cudaMemcpyHostToDevice));
         sha256d_mine_kernel<<<blocks, opt.threads_per_block>>>(
-            d_header, d_target, nonce_begin, opt.iters, d_result, d_completed);
+            d_header, d_target, nonce_begin, window_end, opt.iters,
+            d_result, d_completed);
         cudaError_t kerr = cudaGetLastError();
         if (kerr != cudaSuccess) {
             fprintf(stderr, "CUDA_ERROR kernel launch: %s\n",
@@ -502,10 +504,10 @@ int main(int argc, char** argv) {
         CUDA_CHECK(cudaMemcpy(&host_completed, d_completed,
                               sizeof(unsigned long long), cudaMemcpyDeviceToHost));
 
-        scheduled += per_launch;
+        scheduled += window_end - nonce_begin;
         completed += host_completed;
-        nonce_end = std::min(nonce_begin + per_launch, kNonceSpace);
-        nonce_begin = nonce_end;
+        nonce_end = window_end;
+        nonce_begin = window_end;
         ++rounds_done;
         if (host_result.found) { found = true; reason = "found"; break; }
     }

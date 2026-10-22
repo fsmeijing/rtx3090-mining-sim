@@ -34,6 +34,44 @@ GPU 报告的任何成功结果 SHALL 在 CPU 复核通过后才输出为最终�
 - **WHEN** 模拟一个 GPU 返回错误哈希的场景（注入测试）
 - **THEN** CPU 复核判定不一致，程序报告 `CPU_RECHECK: FAIL` 并以非零退出码结束
 
+### Requirement: 精确计算预算（窗口式分配）
+搜索模式 SHALL 保证实际执行的 SHA-256d 计算次数不超过用户设置的 max-attempts：Host 端 SHALL 为每轮 launch 确定精确 Nonce 窗口 `[window_start, window_end)`（上界 = min(剩余预算, 2^32, GPU 单轮覆盖)），窗口上界 SHALL 传入 Kernel，Kernel 中 nonce >= window_end 的迭代 SHALL 不执行任何 SHA-256d；窗口末端不足一个 block 的任务 SHALL 正确处理（部分线程休眠），同时 SHALL 保留并行执行能力与命中提前退出。必须区分 `scheduled_attempts`（有效分配的候选 Nonce 数量）与 `completed_hashes`（实际完成 SHA-256d 数），且不变式 `completed <= scheduled <= max_attempts` SHALL 恒成立；SHALL 禁止通过修改输出统计值掩盖实际超量计算。
+
+#### Scenario: max-attempts=1 精确执行
+- **WHEN** search 模式设置 `--max-attempts 1`（threads_per_block=256、iters=64）
+- **THEN** scheduled_attempts = 1 且 completed_hashes = 1（旧实现会分配 16384）
+
+#### Scenario: 非整块预算
+- **WHEN** 分别设置 `--max-attempts` 为 16383、16384、16385（目标设为不可能命中的全零）
+- **THEN** 三种情况 scheduled_attempts 与 completed_hashes 均精确等于预算值，无整块超额分配
+
+#### Scenario: 提前命中不超出预算
+- **WHEN** 搜索在窗口内提前命中
+- **THEN** completed_hashes <= scheduled_attempts，差值（命中后休眠线程）如实保留
+
+#### Scenario: 输出字段内部一致
+- **WHEN** 检查任意一次执行的 JSON 输出
+- **THEN** `end_nonce - start_nonce == scheduled_attempts`、`hash_rate == completed/elapsed`、`max_attempts_budget` 与输入一致、status/reason 与 found 一致
+
+### Requirement: fixed-work 严格预算
+fixed-work 模式 SHALL 严格受 `--max-attempts`（每次运行的预算，非多次运行共享总额）、`--rounds`、`--seconds` 三重限制：最后一轮 Kernel SHALL 根据剩余预算与 32-bit Nonce 上界截断；Benchmark SHALL 不执行难度命中提前退出；每轮有效执行的哈希 SHALL 全部计入 completed_hashes；JSON 的 reason SHALL 记录最早触发的结束条件（同刻触发按 time-limit > rounds-done > max-attempts 顺序判定）；Python CLI SHALL 向 CUDA 程序正确传递预算参数，SHALL 禁止静默忽略用户输入。
+
+#### Scenario: fixed-work 精确预算
+- **WHEN** fixed-work 模式分别设置 `--max-attempts` 为 1、1000、16385
+- **THEN** scheduled_attempts 与 completed_hashes 均恰好等于预算值
+
+#### Scenario: 预算先于轮数耗尽
+- **WHEN** fixed-work 设置 `--max-attempts 100000` 且轮数充足
+- **THEN** reason = max-attempts，completed = 100000
+
+#### Scenario: 轮数先于预算耗尽
+- **WHEN** fixed-work 设置 `--rounds 3` 且预算充足
+- **THEN** reason = rounds-done，rounds = 3
+
+#### Scenario: 多次运行的预算语义
+- **WHEN** benchmark 重复多次运行并在 CLI/JSON/OpenSpec/文档中描述预算
+- **THEN** max-attempts 明确标注为"每次运行的预算"（各次独立享有，非共享总额），JSON 中以 `max_attempts_budget.per_run` 记录，各次运行的 reason 逐次保留
+
 ### Requirement: GPU 状态四态枚举
 CLI 与 Python GPURunner SHALL 以四态区分 GPU 执行结果：`GPU_NOT_RUN`（未执行）、`GPU_ERROR`（参数错误/CUDA 错误）、`GPU_RUN_NO_HIT`（正常执行未命中）、`GPU_RUN_FOUND`（正常执行命中）。CUDA 可执行程序退出码契约 SHALL 为：0=正常执行（含未命中）、2=参数错误、3=CUDA 执行错误。正常执行但未命中时 SHALL 保留 attempts/elapsed/hash_rate 等统计且绝不标记 NOT_RUN。
 
@@ -61,5 +99,5 @@ CUDA 程序 SHALL 校验：`--seconds` 必须为正且有限、`--max-attempts` 
 - **THEN** 程序正常退出，状态为 `GPU_RUN_NO_HIT`，reason 为 nonce-space-exhausted，completed_hashes 只计实际完成量
 
 #### Scenario: 尾部单个 Nonce 边界
-- **WHEN** `--start-nonce 4294967295`（最后一个 Nonce）且目标为最大值
-- **THEN** 程序完成恰好 1 个哈希并命中，completed_hashes = 1
+- **WHEN** `--start-nonce 4294967295`（最后一个 Nonce）且目标为必然命中值
+- **THEN** 程序最多计算 1 个 Nonce（completed_hashes <= 1）并命中该 Nonce

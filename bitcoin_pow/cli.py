@@ -150,11 +150,13 @@ def cmd_mine(args) -> int:
             print("成功哈希 H    : %s" % raw["hash_hex"])
         else:   # GPU_RUN_NO_HIT：正常执行但未命中，保留全部统计
             print("GPU 状态      : RUN_NO_HIT（正常执行，未找到合格哈希）")
-        print("累计分配      : %d（scheduled_attempts，MEASURED）" % raw["scheduled_attempts"])
-        print("实际完成      : %d（completed_hashes，MEASURED）" % raw["completed_hashes"])
+        print("搜索预算      : %d（max-attempts，本次运行）" % raw["max_attempts_budget"])
+        print("累计分配      : %d（scheduled_attempts，MEASURED，<= 预算）" % raw["scheduled_attempts"])
+        print("实际完成      : %d（completed_hashes，MEASURED，<= 分配）" % raw["completed_hashes"])
         print("用时          : %.3f s（MEASURED）" % raw["elapsed_seconds"])
         print("GPU 算力      : %s H/s（completed/elapsed，MEASURED）"
               % format(int(raw["hash_rate"]), ","))
+        print("结束原因      : %s" % raw.get("reason", "n/a"))
         if gpu_status == GPU_RUN_NO_HIT:
             print("结果          : found=false（如实报告，不伪造成功）")
         report.update({

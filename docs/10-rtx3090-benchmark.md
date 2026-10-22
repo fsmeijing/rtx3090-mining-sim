@@ -15,27 +15,31 @@
 
 ## 固定工作量 Benchmark（推荐口径）
 
-`fixed-work` 模式：**无 H≤T 判定、无提前退出**，Nonce 范围预先确定
-（32-bit 上界处截断并如实报告），重复 3 次统计吞吐量：
+`fixed-work` 模式：**无 H≤T 判定、无命中提前退出**，受
+max-attempts（每次运行的预算）/ rounds / seconds 三重限制，
+reason 记录最早触发者，重复 3 次统计吞吐量：
 
-| 模式 | min | median | max | 3 次累计 completed |
+| 模式 | min | median | max | 每次运行 completed |
 |---|---:|---:|---:|---:|
-| medium | 3.53 GH/s | 3.53 GH/s | 3.94 GH/s | 1,289,748,480 |
-| genesis | 3.72 GH/s | 3.74 GH/s | 3.93 GH/s | 1,289,748,480 |
+| medium | 3.42 GH/s | 3.44 GH/s | 3.46 GH/s | 429,916,160 |
+| genesis | 3.11 GH/s | 3.46 GH/s | 3.49 GH/s | 429,916,160 |
 
-统计契约（诚实算力的关键）：
+精确预算契约（诚实算力的关键）：
 
-- `scheduled_attempts` = 已分配给 GPU 的工作量；
-- `completed_hashes` = 内核**实际完成**的哈希数（atomicAdd 累计）；
+- Host 端为每轮 launch 确定**精确 Nonce 窗口**并传入 Kernel；
+  窗口外的线程/迭代**不执行任何 SHA-256d**；
+- `scheduled_attempts` = 有效分配的候选 Nonce 数（精确）；
+  `completed_hashes` = 内核实际完成数（atomicAdd）；
+- **不变式：`completed_hashes <= scheduled_attempts <= max_attempts` 恒成立**；
 - `hash_rate = completed_hashes / elapsed_seconds`；
-- **提前退出的线程工作量不计入完成数** —— 绝不把"分配了"当"算完了"。
+- max-attempts 是**每次运行的预算**（多次运行各次独立享有）。
 
 ## 搜索模式（教学口径）
 
 | 模式 | scheduled | completed | 用时 | 结果 | CPU 复核 |
 |---|---:|---:|---:|---|---|
-| genesis（真实创世难度） | 2,085,093,376 | 2,085,068,640 | 0.555 s | 命中 Nonce **2,083,236,893** | PASS |
-| easy | 21,495,808 | 36,064 | 极短 | 命中后提前退出 | PASS |
+| genesis（真实创世难度） | 2,085,093,376 | 2,085,042,688 | 0.640 s | 命中 Nonce **2,083,236,893** | PASS |
+| easy | 21,495,808 | 35,744 | 极短 | 命中后提前退出 | PASS |
 
 创世命中哈希（与主网一致）：
 
@@ -44,12 +48,12 @@
 ```
 
 **最有说服力的一件事**：genesis 模式下 GPU 从 Nonce 0 顺序扫描，
-0.555 秒后命中的正是 2009 年中本聪使用的 Nonce 2,083,236,893。
+0.640 秒后命中的正是 2009 年中本聪使用的 Nonce 2,083,236,893。
 这不是巧合：创世区块头固定、满足 H≤T 的 Nonce 集合确定，
 我们的内核与真实比特币 SHA-256d 逐位一致，必然重新发现历史。
 
-注意 completed（2,085,068,640）比 scheduled（2,085,093,376）少的
-24,736 次是命中后提前退出的线程工作量——如实保留差异，不虚报。
+注意 completed（2,085,042,688）比 scheduled（2,085,093,376）少的
+50,688 次是命中后提前退出的线程工作量——如实保留差异，不虚报。
 
 ## 理论吞吐量分层（THEORETICAL）
 
@@ -80,7 +84,7 @@
 | 数字 | 算法 | 类别 | 出处 |
 |---|---|---|---|
 | 120 MH/s | ETHash（以太坊时代算法） | TEACHING_SIM | 旧 `simulator.py` 收益模拟参数 |
-| 3.5–3.9 GH/s | Bitcoin SHA-256d | MEASURED | 本报告 |
+| 3.4–3.5 GH/s | Bitcoin SHA-256d | MEASURED | 本报告 |
 
 ETHash 和 SHA-256d 是完全不同的算法，算力数字不可比、不可互换。
 

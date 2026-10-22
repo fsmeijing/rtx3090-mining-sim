@@ -44,6 +44,7 @@ class _FakeMiner:
             "status": status, "mode": "search",
             "device_name": "FAKE", "sm_count": 1,
             "cuda_runtime_version": "12.4", "driver_version": "12.4",
+            "max_attempts_budget": 1000,
             "start_nonce": 0, "end_nonce": 1000,
             "scheduled_attempts": 1000, "completed_hashes": 1000,
             "rounds": 1, "elapsed_seconds": 0.5, "hash_rate": 2000.0,
