@@ -26,8 +26,8 @@ Python 参考实现实测约 **17 万 H/s**（hashlib 已是 C 实现，
 每线程 64 次尝试，一次 launch 共 82SM×16块×256线程×64 ≈ 2150 万次
 ```
 
-RTX 3090 实测 **3.3–11.9 GH/s**（见 docs/10）——
-是 Python CPU 参考实现的约 **7 万倍**。
+RTX 3090 固定工作量 benchmark 实测 **3.5–3.9 GH/s**（持续口径，见 docs/10）——
+是 Python CPU 参考实现的约 **2 万倍**。
 
 ## 为什么 GPU 这么快？
 
@@ -68,8 +68,8 @@ GPU 报告命中 → CPU 用 hashlib 重算一次 → 一致才宣布成功（CP
 ```bash
 # CPU 参考（约 17 万 H/s）
 python3 -m bitcoin_pow --mode easy --max-attempts 1000000
-# GPU（约 5–12 GH/s，取决于模式）
-python3 -m bitcoin_pow --mode easy --gpu --max-attempts 1000000000
+# GPU（固定工作量口径约 3.5–3.9 GH/s）
+python3 -m bitcoin_pow --benchmark --mode genesis --gpu --seconds 15
 ```
 
 同样的题面、同样的判定规则——只是"工人数量"不同。

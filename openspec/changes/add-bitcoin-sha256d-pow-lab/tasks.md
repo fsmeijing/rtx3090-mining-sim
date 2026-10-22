@@ -35,3 +35,14 @@
 - [x] 6.1 `.github/workflows/ci.yml`：CPU 测试 + 创世验证 + 向量 + nBits + Nonce 正确性 + 回归 + openspec 严格验证 + CUDA 编译门禁（GPU 实测 NOT_RUN）
 - [x] 6.2 推送 `feat/bitcoin-sha256d-pow-lab`，创建 PR，CI 全绿
 - [x] 6.3 汇总验收清单与最终报告
+
+## 7. PR #1 审查修复
+- [x] 7.1 GPU 状态四态枚举（NOT_RUN/ERROR/RUN_NO_HIT/RUN_FOUND）与退出码契约（0/2/3）
+- [x] 7.2 scheduled_attempts 与 completed_hashes 分离，hash_rate 只基于 completed
+- [x] 7.3 固定工作量 Benchmark（无提前退出/预设 Nonce 范围/32-bit 截断/时间上限/多次运行统计）
+- [x] 7.4 删除错误理论 SHA-256d 上界，理论吞吐量三层分解（SHA-256d 层报告 null）
+- [x] 7.5 边界防御：CUDA API 返回码/内核启动错误/非法参数/start-nonce 超界/Nonce 空间耗尽/参数缺失
+- [x] 7.6 diff_int() 字节序修复（与 compare() 小端语义一致）+ 回归测试
+- [x] 7.7 构建清理：CMake 无 CUDA_HOME/CXX 行为修复、git rm --cached 二进制
+- [x] 7.8 RTX 3090 复测：genesis 复核 PASS、固定工作量 benchmark（median 3.74 GH/s genesis / 3.53 GH/s medium）
+- [x] 7.9 文档与报告同步勘误（docs/09、docs/10、reports/、README）

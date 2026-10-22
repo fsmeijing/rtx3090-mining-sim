@@ -1,15 +1,28 @@
 {
-  "schema": "rtx3090-mining-sim/benchmark-v1",
-  "generated_at_utc": "2026-10-22T09:02:17Z",
+  "schema": "rtx3090-mining-sim/benchmark-v2",
+  "generated_at_utc": "2026-10-22T09:39:44Z",
   "seed": null,
   "mode": "medium",
   "target_hex": "00000ffff0000000000000000000000000000000000000000000000000000000",
-  "target_source": "MEASURED_NA / 派生自创世 nBits=0x1d00ffff（确定值）",
+  "target_source": "派生自创世 nBits=0x1d00ffff（确定值）",
   "target_nbits": "0x1d00ffff",
   "hash_function": "SHA256d（SHA256(SHA256(80B header))）",
   "offline": true,
-  "gpu_status": "RUN",
+  "statistics_contract": {
+    "scheduled_attempts": "已分配工作量（可能未完成）",
+    "completed_hashes": "内核实际完成哈希数",
+    "hash_rate": "completed_hashes / elapsed_seconds（MEASURED）"
+  },
+  "gpu_status": "GPU_RUN_NO_HIT",
+  "gpu_status_note": "固定工作量模式正常执行、无命中属于预期（found=false），GPU_STATUS=RUN",
   "gpu": {
+    "correctness_check": {
+      "value": "PASS",
+      "source": "MEASURED",
+      "method": "search 模式 easy 目标命中 Nonce 后，CPU 用 hashlib 重建区块头复算比对",
+      "hit_nonce": 1226368,
+      "hit_hash_hex": "00f38ece4f7c6d9f6fd9e3f683b74f0574e6024e0498d1cd5cc1e04dcad3b1e7"
+    },
     "device_name": {
       "value": "NVIDIA GeForce RTX 3090",
       "source": "MEASURED"
@@ -26,50 +39,94 @@
       "value": "13.0",
       "source": "MEASURED"
     },
-    "nonce_range": {
-      "value": [
-        0,
-        21495808
+    "fixed_workload": {
+      "description": "fixed-work 模式：无 H<=T 判定、无提前退出、Nonce 范围预设、32-bit 上界截断",
+      "runs": 3,
+      "rounds_per_run": 20,
+      "results": [
+        {
+          "run": 1,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.121622,
+          "hash_rate": 3534855207.1,
+          "source": "MEASURED"
+        },
+        {
+          "run": 2,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.121681,
+          "hash_rate": 3533141246.4,
+          "source": "MEASURED"
+        },
+        {
+          "run": 3,
+          "start_nonce": 0,
+          "end_nonce": 429916160,
+          "scheduled_attempts": 429916160,
+          "completed_hashes": 429916160,
+          "rounds": 20,
+          "reason": "rounds-done",
+          "elapsed_seconds": 0.109227,
+          "hash_rate": 3935987988.3,
+          "source": "MEASURED"
+        }
       ],
-      "source": "MEASURED"
+      "total_completed_hashes": {
+        "value": 1289748480,
+        "source": "MEASURED"
+      },
+      "total_elapsed_seconds": {
+        "value": 0.35253,
+        "source": "MEASURED"
+      },
+      "hash_rate": {
+        "unit": "H/s（completed/elapsed，MEASURED）",
+        "min": 3533141246.4,
+        "median": 3534855207.1,
+        "max": 3935987988.3
+      },
+      "hash_rate_mhs": {
+        "median": 3534.8552071,
+        "source": "MEASURED"
+      },
+      "hash_rate_ghs": {
+        "median": 3.5348552071,
+        "source": "MEASURED"
+      }
     },
-    "attempts": {
-      "value": 21495808,
-      "source": "MEASURED"
+    "theoretical_breakdown": {
+      "integer_ops_throughput": {
+        "value": 17843200000000.0,
+        "source": "THEORETICAL",
+        "unit": "32-bit integer ops/s",
+        "formula": "SM数 × 128 CUDA核/SM × 1.70GHz × 1 INT32 op/cycle"
+      },
+      "sha256_compression_throughput": {
+        "value": 23790933333.333332,
+        "source": "THEORETICAL",
+        "unit": "SHA-256 compressions/s（绝对上界量级）",
+        "formula": "integer_ops / ~750 ops per compression（假设每周期每核1次整数运算，忽略一切开销）",
+        "caveat": "仅为不可达的绝对上界，不构成对实测值的预测"
+      },
+      "sha256d_hash_rate": {
+        "value": null,
+        "source": "THEORETICAL",
+        "note": "无可靠理论模型（压缩内部依赖链/寄存器压力/调度开销不可从规格推算），不报告理论 SHA-256d H/s；唯一可信数字是 benchmark 的 MEASURED 值"
+      }
     },
-    "elapsed_seconds": {
-      "value": 0.003842,
-      "source": "MEASURED"
-    },
-    "hash_rate": {
-      "value": 5594740022.9,
-      "source": "MEASURED",
-      "unit": "H/s"
-    },
-    "hash_rate_mhs": {
-      "value": 5594.7400228999995,
-      "source": "MEASURED",
-      "unit": "MH/s"
-    },
-    "hash_rate_ghs": {
-      "value": 5.5947400229,
-      "source": "MEASURED",
-      "unit": "GH/s"
-    },
-    "theoretical_hash_rate": {
-      "value": 17843200000000.0,
-      "source": "THEORETICAL",
-      "unit": "H/s（上界量级）",
-      "formula": "SM数 × 128 CUDA核/SM × 1.70GHz × 1 op/cycle（未考虑真实内核效率）"
-    },
-    "found": true,
-    "hit_nonce": 1085914,
-    "hit_hash_hex": "0000073e55b8420039727388520c87a013196e01fce6da01b9699ad7ba739026",
-    "target_hex": "00000ffff0000000000000000000000000000000000000000000000000000000",
     "cpu_recheck": {
       "value": "PASS",
       "source": "MEASURED"
-    },
-    "cpu_recheck_note": "CPU 用 Python hashlib 重建区块头并复算 SHA256d 后比对"
+    }
   }
 }

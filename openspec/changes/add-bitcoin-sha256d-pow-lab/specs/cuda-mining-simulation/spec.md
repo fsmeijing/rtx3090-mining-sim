@@ -33,3 +33,33 @@ GPU 报告的任何成功结果 SHALL 在 CPU 复核通过后才输出为最终�
 #### Scenario: 复核失败即失败
 - **WHEN** 模拟一个 GPU 返回错误哈希的场景（注入测试）
 - **THEN** CPU 复核判定不一致，程序报告 `CPU_RECHECK: FAIL` 并以非零退出码结束
+
+### Requirement: GPU 状态四态枚举
+CLI 与 Python GPURunner SHALL 以四态区分 GPU 执行结果：`GPU_NOT_RUN`（未执行）、`GPU_ERROR`（参数错误/CUDA 错误）、`GPU_RUN_NO_HIT`（正常执行未命中）、`GPU_RUN_FOUND`（正常执行命中）。CUDA 可执行程序退出码契约 SHALL 为：0=正常执行（含未命中）、2=参数错误、3=CUDA 执行错误。正常执行但未命中时 SHALL 保留 attempts/elapsed/hash_rate 等统计且绝不标记 NOT_RUN。
+
+#### Scenario: 正常执行但未命中
+- **WHEN** GPU 正常完成搜索但在上限内未找到满足 H<=T 的 Nonce
+- **THEN** 输出 `GPU_STATUS` 为 RUN（状态枚举 `GPU_RUN_NO_HIT`）、`found=false`、统计数据完整保留，不出现 NOT_RUN，退出码为 0
+
+#### Scenario: CUDA 执行错误
+- **WHEN** CUDA API/内核启动/同步返回错误（退出码 3）
+- **THEN** CLI 输出 `GPU_STATUS: ERROR` 与原因，不产出任何可信数值，以非零退出码结束
+
+### Requirement: 参数与 Nonce 边界防御
+CUDA 程序 SHALL 校验：`--seconds` 必须为正且有限、`--max-attempts` 必须 >= 1、`--start-nonce` 必须在 [0, 2^32)、必需参数缺失即拒绝；Nonce 搜索 SHALL 在 32-bit 空间上界处正确截断，空间耗尽时 SHALL 如实报告而非挂起；所有 CUDA API 调用与内核启动 SHALL 检查返回码。
+
+#### Scenario: 非法参数拒绝
+- **WHEN** 传入 `--seconds 0`、`--seconds abc`、`--max-attempts 0` 或缺失 `--header-hex`
+- **THEN** 程序以退出码 2 拒绝执行并给出参数错误说明
+
+#### Scenario: start-nonce 超界
+- **WHEN** 传入 `--start-nonce 4294967296`（>= 2^32）
+- **THEN** 程序以退出码 2 拒绝执行
+
+#### Scenario: Nonce 空间耗尽
+- **WHEN** 搜索从接近 2^32 的起点开始直至空间耗尽且未命中
+- **THEN** 程序正常退出，状态为 `GPU_RUN_NO_HIT`，reason 为 nonce-space-exhausted，completed_hashes 只计实际完成量
+
+#### Scenario: 尾部单个 Nonce 边界
+- **WHEN** `--start-nonce 4294967295`（最后一个 Nonce）且目标为最大值
+- **THEN** 程序完成恰好 1 个哈希并命中，completed_hashes = 1

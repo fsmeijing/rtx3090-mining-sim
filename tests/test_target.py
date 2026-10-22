@@ -9,6 +9,7 @@ from bitcoin_pow.target import (
     MODE_GENESIS,
     MODE_MEDIUM,
     compare,
+    diff_int,
     leading_zero_bits,
     mode_shift_bits,
     mode_target,
@@ -86,6 +87,25 @@ class TestCompare(unittest.TestCase):
         self.assertTrue(compare(self.digest_for(t - 1), t))
         self.assertTrue(compare(self.digest_for(t), t))
         self.assertFalse(compare(self.digest_for(t + 1), t))   # 仅末位差 1 也判负
+
+
+class TestDiffInt(unittest.TestCase):
+    """diff_int() 必须与 compare() 一致：小端整数语义。"""
+
+    def test_diff_int_matches_display_int(self):
+        from bitcoin_pow.sha256d import to_display_hex
+
+        from bitcoin_pow.block_header import GENESIS_HASH_HEX
+        digest = bytes.fromhex(GENESIS_HASH_HEX)[::-1]   # 协议序
+        self.assertEqual(diff_int(digest), int(GENESIS_HASH_HEX, 16))
+        self.assertEqual(diff_int(digest), int(to_display_hex(digest), 16))
+
+    def test_diff_int_consistent_with_compare(self):
+        v = 0x00000000FFFF0000000000000000000000000000000000000000000000000000
+        digest = v.to_bytes(32, "little")
+        self.assertEqual(diff_int(digest), v)
+        self.assertTrue(compare(digest, v))       # H == T 满足
+        self.assertFalse(compare(digest, v - 1))  # H > T-1 不满足
 
 
 class TestModes(unittest.TestCase):

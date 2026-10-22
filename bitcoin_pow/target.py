@@ -96,5 +96,11 @@ def compare(hash256: bytes, target: int) -> bool:
 
 
 def diff_int(hash256: bytes) -> int:
-    """哈希的 256-bit 整数值（教学展示用）。"""
-    return int.from_bytes(hash256, "big")
+    """哈希的 256-bit 整数值（教学展示用）。
+
+    与 compare() 保持一致的小端整数语义：比特币把协议序摘要按小端
+    解释为 256-bit 整数，即整数值 == int(展示序十六进制, 16)。
+    """
+    if len(hash256) != 32:
+        raise ValueError("哈希必须为 32 字节")
+    return int.from_bytes(hash256, "little")

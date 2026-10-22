@@ -43,16 +43,19 @@ python3 -m bitcoin_pow --benchmark --mode genesis --gpu --seconds 30 --json repo
 
 CLI 完整支持：`--verify` / `--mode easy|medium|genesis` / `--benchmark` / `--seconds` / `--max-attempts` / `--gpu` / `--binary` / `--json` / `--seed`。
 
-### 实测算力（真实测量，非理论值）
+### 实测算力（真实测量，非理论值；固定工作量口径）
 
-| 模式 | 累计尝试 | 用时 | 实测算力 | CPU 复核 |
-|---|---:|---:|---:|---|
-| easy | 21,495,808 | ~0.002 s | 11.92 GH/s | PASS |
-| medium | 21,495,808 | ~0.004 s | 5.59 GH/s | PASS |
-| genesis（真实创世难度） | 2,085,093,376 | 0.640 s | 3.26 GH/s | PASS，命中 Nonce 2,083,236,893 |
+| 模式 | min | median | max | 3 次累计 completed | CPU 复核 |
+|---|---:|---:|---:|---:|---|
+| medium（20 轮/次） | 3.53 GH/s | 3.53 GH/s | 3.94 GH/s | 1,289,748,480 | PASS |
+| genesis（20 轮/次） | 3.72 GH/s | 3.74 GH/s | 3.93 GH/s | 1,289,748,480 | PASS |
 
-理论推算上界约 17.8 TH/s（THEORETICAL），实测 3.3–11.9 GH/s（MEASURED），
-两类数值在报告中以来源标签严格区分，详见 [reports/benchmark_rtx3090.md](reports/benchmark_rtx3090.md)。
+- 统计契约：`hash_rate = completed_hashes / elapsed`；命中后提前退出的
+  线程工作量只计入 `scheduled_attempts`，**绝不冒充已完成**。
+- 创世搜索模式实测 0.555s 命中真实 Nonce 2,083,236,893（复现创世哈希）。
+- 理论层仅报告整数操作吞吐（≈17.8 T INT32 ops/s，THEORETICAL）与
+  SHA-256 压缩上界量级；**不报告无可靠模型的"理论 SHA-256d 算力"**。
+  详见 [reports/benchmark_rtx3090.md](reports/benchmark_rtx3090.md)。
 
 ### 目录结构
 

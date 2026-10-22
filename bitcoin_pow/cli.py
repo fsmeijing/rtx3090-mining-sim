@@ -81,17 +81,30 @@ def cmd_verify() -> int:
 
 def run_gpu_mine(args, header, target) -> dict:
     runner = GPURunner(args.binary)
-    raw = runner.mine(
+    return runner.mine(
         header, target,
         start_nonce=args.start_nonce,
         seconds=args.seconds,
         max_attempts=args.max_attempts,
     )
-    return raw
 
 
 def cmd_mine(args) -> int:
     from .block_header import genesis_header
+    from .gpu import (
+        GPU_ERROR,
+        GPU_NOT_RUN,
+        GPU_RUN_FOUND,
+        GPU_RUN_NO_HIT,
+        GpuExecutionError,
+        GpuParameterError,
+    )
+
+    if args.seconds <= 0 or args.max_attempts < 1 or not (
+            0 <= args.start_nonce < (1 << 32)):
+        print("PARAM_ERROR：--seconds 须为正、--max-attempts 须 >= 1、"
+              "--start-nonce 须在 [0, 2^32)")
+        return 2
 
     print("=" * 70)
     print("比特币 SHA-256d 工作量证明实验（完全离线教学模拟）")
@@ -101,30 +114,56 @@ def cmd_mine(args) -> int:
     print("区块头        : 创世区块（详见 --verify）")
     print("-" * 70)
 
+    gpu_status = GPU_NOT_RUN
+    report = {"command": "mine", "mode": args.mode}
+
     if args.gpu:
         try:
             raw = run_gpu_mine(args, header, target)
         except GpuUnavailableError as exc:
+            gpu_status = GPU_NOT_RUN
             print("GPU_STATUS    : NOT_RUN（原因：%s）" % exc)
             print("说明          : 未产生任何 GPU 计算结果，以上不包含实测数据。")
+            report.update({"gpu_status": gpu_status})
+            _finish_mine(args, report)
             return 0
-        from .gpu import recheck_gpu_result
+        except (GpuParameterError, GpuExecutionError) as exc:
+            gpu_status = GPU_ERROR
+            print("GPU_STATUS    : ERROR（%s）" % exc)
+            print("说明          : 执行失败，不存在可信的 GPU 数值，绝不编造。")
+            report.update({"gpu_status": gpu_status})
+            _finish_mine(args, report)
+            return 3
 
-        ok = recheck_gpu_result(header, target, raw)
-        print("CPU 复核      : %s" % ("PASS" if ok else "FAIL"))
-        if not ok:
-            return 2
-        status = "FOUND" if raw.get("found") else ("MAX_ATTEMPTS" if raw.get("reason") == "max-attempts" else "EXHAUSTED")
-        print("GPU 状态      : %s" % status)
-        print("累计尝试      : %d（MEASURED）" % raw["attempts"])
-        print("用时          : %.3f s（MEASURED）" % raw["elapsed_seconds"])
-        print("GPU 算力      : %s H/s（MEASURED）" % format(int(raw["hash_rate"]), ","))
-        if raw.get("found"):
+        from .gpu import gpu_status_from_raw, recheck_gpu_result
+
+        gpu_status = gpu_status_from_raw(raw)
+        if gpu_status == GPU_RUN_FOUND:
+            ok = recheck_gpu_result(header, target, raw)
+            print("CPU 复核      : %s" % ("PASS" if ok else "FAIL"))
+            if not ok:
+                report.update({"gpu_status": gpu_status, "cpu_recheck": "FAIL"})
+                _finish_mine(args, report)
+                return 2
+            print("GPU 状态      : RUN_FOUND")
             print("命中 Nonce    : %d" % raw["nonce"])
             print("成功哈希 H    : %s" % raw["hash_hex"])
-        else:
-            print("结果          : 未找到解（如实报告，不伪造成功）")
-        report = {"command": "mine", "mode": args.mode, "gpu": raw, "cpu_recheck": ok}
+        else:   # GPU_RUN_NO_HIT：正常执行但未命中，保留全部统计
+            print("GPU 状态      : RUN_NO_HIT（正常执行，未找到合格哈希）")
+        print("累计分配      : %d（scheduled_attempts，MEASURED）" % raw["scheduled_attempts"])
+        print("实际完成      : %d（completed_hashes，MEASURED）" % raw["completed_hashes"])
+        print("用时          : %.3f s（MEASURED）" % raw["elapsed_seconds"])
+        print("GPU 算力      : %s H/s（completed/elapsed，MEASURED）"
+              % format(int(raw["hash_rate"]), ","))
+        if gpu_status == GPU_RUN_NO_HIT:
+            print("结果          : found=false（如实报告，不伪造成功）")
+        report.update({
+            "gpu_status": gpu_status,
+            "gpu": raw,
+            "cpu_recheck": ("PASS" if gpu_status == GPU_RUN_FOUND
+                            and recheck_gpu_result(header, target, raw)
+                            else "N/A" if gpu_status == GPU_RUN_NO_HIT else "FAIL"),
+        })
     else:
         t0 = time.perf_counter()
         res = search_nonce(
@@ -135,7 +174,7 @@ def cmd_mine(args) -> int:
         elapsed = time.perf_counter() - t0
         rate = res.attempts / elapsed if elapsed > 0 else 0.0
         print("搜索方式      : CPU 参考实现（hashlib）")
-        print("累计尝试      : %d（MEASURED）" % res.attempts)
+        print("累计尝试      : %d（MEASURED，completed）" % res.attempts)
         print("用时          : %.3f s（MEASURED）" % elapsed)
         print("CPU 算力      : %.0f H/s（MEASURED）" % rate)
         if res.found:
@@ -144,14 +183,19 @@ def cmd_mine(args) -> int:
             print("结论          : H <= T 成立（完整 256-bit 整数比较）")
         else:
             print("结果          : %s（%d 次尝试内未找到解）" % (res.reason, res.attempts))
-        report = {
-            "command": "mine", "mode": args.mode,
+        report.update({
+            "gpu_status": GPU_NOT_RUN,
             "attempts": res.attempts, "elapsed_seconds": elapsed,
             "cpu_hash_rate": rate, "found": res.found,
             "nonce": res.nonce, "hash_hex": res.hash_hex,
             "reason": res.reason,
-        }
+        })
 
+    _finish_mine(args, report)
+    return 0
+
+
+def _finish_mine(args, report: dict) -> None:
     if args.json:
         import pathlib
 
@@ -160,7 +204,6 @@ def cmd_mine(args) -> int:
             json.dump(report, f, ensure_ascii=False, indent=2)
         print("报告已导出    : %s" % args.json)
     print("=" * 70)
-    return 0
 
 
 def cmd_benchmark(args) -> int:
